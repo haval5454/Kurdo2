@@ -68,7 +68,7 @@ async def filter_links(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 print(f"کێشە لە وەرگرتنی زانیاری ئەندام: {e}")
 
             # Regex ی ناسینەوەی لینکەکان بۆ ئەندامانی ئاسایی
-            link_pattern = r"https?://\S+|www\.\S+|t\.me/\S+|@\w+"
+            link_pattern = r"https?://\S+|www\.\S+|t.me/\S+|@\w+"
             
             if re.search(link_pattern, update.message.text):
                 try:
