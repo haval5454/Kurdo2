@@ -1,270 +1,181 @@
-import asyncio
-import logging
 import re
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
-    ApplicationBuilder,
-    MessageHandler,
+    Application,
     CommandHandler,
     CallbackQueryHandler,
+    ContextTypes,
+    MessageHandler,
     filters,
-    ContextTypes
 )
 
 TOKEN = "8725595567:AAG1lw-AMx0v9EQS_i9fsFPn5QcFi8zHaSc"
-ADMIN_ID = 8734106005
 
-DELETE_DELAY = 900
-PHOTO_DELETE_DELAY = 10800  # 3 hours
-
-URL_REGEX = re.compile(
-    r'(https?://\S+|t\.me/\S+|www\.\S+|@\w+)',
-    re.IGNORECASE
-)
-
-logging.basicConfig(level=logging.INFO)
-
-# هەڵبژاردنی سڕینەوەی لینک بۆ هەر گرووپێک جیاوازە
-link_protection = {}
+# گرووپەکانی کە پاراستنی لینک لێیان چالاکە
+link_protection = set()
 
 
-async def delete_msg(bot, chat_id, msg_id):
-    try:
-        await bot.delete_message(
-            chat_id=chat_id,
-            message_id=msg_id
-        )
-    except:
-        pass
-
-
-async def delete_photo(bot, chat_id, msg_id):
-    await asyncio.sleep(PHOTO_DELETE_DELAY)
-
-    try:
-        await bot.delete_message(
-            chat_id=chat_id,
-            message_id=msg_id
-        )
-    except:
-        pass
-
-
-async def process_media(
-    bot,
-    chat_id,
-    msg_id,
-    file_id,
-    caption,
-    is_video=True
-):
-    await asyncio.sleep(DELETE_DELAY)
-
-    await delete_msg(
-        bot,
-        chat_id,
-        msg_id
-    )
-
-    try:
-        if is_video:
-            await bot.send_video(
-                ADMIN_ID,
-                video=file_id,
-                caption=caption
-            )
-        else:
-            await bot.send_animation(
-                ADMIN_ID,
-                animation=file_id,
-                caption=caption
-            )
-    except:
-        pass
-
-
+# =========================
 # /start
+# =========================
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
     keyboard = [
         [
             InlineKeyboardButton(
-                "1️⃣ کات دانان بۆ سڕینەوەی ڤیدیۆکان",
-                callback_data="video_settings"
+                "➕ لە گروپەکەت زیادم بکە",
+                url="https://t.me/parezraw_bot?startgroup=true"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                "1️⃣ کات بۆ سڕینەوەی ڤیدیۆکان",
+                callback_data="video"
             )
         ],
         [
             InlineKeyboardButton(
                 "2️⃣ کات دانان بۆ سڕینەوەی وێنەکان",
-                callback_data="photo_settings"
+                callback_data="photo"
             )
         ],
         [
             InlineKeyboardButton(
-                "3️⃣ سڕینەوەی هەموو لینکێک",
-                callback_data="link_settings"
+                "3️⃣ سڕینەوەی هەموو لینکەکان",
+                callback_data="links"
             )
         ]
     ]
 
     await update.message.reply_text(
-        """✨ بەخێربێیت بۆ بۆتی هاوکاری گروپ! ✨
-
-ئەم بۆتە یارمەتیت دەدات بۆ بەڕێوەبردن و ڕێکخستنی گرووپەکەت بەبێ هیچ کێشەیەک.
-
-بەشە سەرەکییەکانی:
-1- کات دانان بۆ سڕینەوەی ڤیدیۆکان
-2- کات دانان بۆ سڕینەوەی وێنەکان
-3- سڕینەوەی هەموو لینکێک
-
-تکایە یەکێک لە هەڵبژاردنەکان هەڵبژێرە 👇""",
+        "✨ بەخێربێیت ✨\n\n"
+        "👇 هەڵبژاردنێک هەڵبژێرە:",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
 
-# دوگمەکان
+# =========================
+# Button Handler
+# =========================
+
 async def button_handler(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
 ):
+
     query = update.callback_query
     await query.answer()
 
-    chat_id = query.message.chat_id
+    # =========================
+    # سڕینەوەی لینکەکان
+    # =========================
 
-    # بەشی لینکەکان
-    if query.data == "link_settings":
+    if query.data == "links":
 
         keyboard = [
             [
                 InlineKeyboardButton(
                     "بەڵێ ✅",
-                    callback_data="links_on"
+                    callback_data="yes_links"
                 ),
                 InlineKeyboardButton(
                     "نەخێر ❌",
-                    callback_data="links_off"
+                    callback_data="no_links"
                 )
             ]
         ]
 
-        await query.message.reply_text(
-            "🔗 ئایا دڵنیایت دەتەوێت سڕینەوەی هەموو لینکەکان چالاک بکەیت؟",
+        await query.edit_message_text(
+            "ڕازیت؟\n\n"
+            "هەر پەیامێک لینک یان @username ـی تێدا بێت "
+            "لە گرووپەکە دەسڕێتەوە.",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
-    # چالاککردنی لینک
-    elif query.data == "links_on":
+    # =========================
+    # بەڵێ
+    # =========================
 
-        link_protection[chat_id] = True
+    elif query.data == "yes_links":
 
-        await query.message.reply_text(
-            "✅ سڕینەوەی لینکەکان چالاک کرا.\n\n"
-            "لە ئێستاوە هەر لینکێک لەم گرووپەدا بنێردرێت دەسڕێتەوە."
+        if query.message.chat.type in ["group", "supergroup"]:
+
+            chat_id = query.message.chat.id
+
+            link_protection.add(chat_id)
+
+            await query.edit_message_text(
+                "✅ سڕینەوەی لینکەکان چالاک کرا.\n\n"
+                "لە ئێستاوە هەر پەیامێک کە "
+                "لینک یان @username ـی تێدا بێت "
+                "لەو گرووپە دەسڕێتەوە."
+            )
+
+        else:
+
+            await query.edit_message_text(
+                "⚠️ ئەم هەڵبژاردنە دەبێت لە گرووپەکە چالاک بکرێت."
+            )
+
+    # =========================
+    # نەخێر
+    # =========================
+
+    elif query.data == "no_links":
+
+        await query.edit_message_text(
+            "❌ سڕینەوەی لینکەکان چالاک نەکرا."
         )
 
-    # ناچالاککردنی لینک
-    elif query.data == "links_off":
 
-        link_protection[chat_id] = False
+# =========================
+# Link / Username Detector
+# =========================
 
-        await query.message.reply_text(
-            "❌ سڕینەوەی لینکەکان ناچالاک کرا.\n\n"
-            "لینکەکان لەم گرووپەدا ناسڕێنەوە."
-        )
-
-    # ئەمانە هێشتا کاریان زیاد نەکراوە
-    elif query.data == "video_settings":
-
-        await query.message.reply_text(
-            "🎥 بەشی کات دانان بۆ سڕینەوەی ڤیدیۆکان دواتر زیاد دەکرێت."
-        )
-
-    elif query.data == "photo_settings":
-
-        await query.message.reply_text(
-            "🖼️ بەشی کات دانان بۆ سڕینەوەی وێنەکان دواتر زیاد دەکرێت."
-        )
-
-
-async def handle(
+async def delete_links(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
 ):
-    msg = update.message
 
-    if not msg:
+    message = update.effective_message
+    chat = update.effective_chat
+
+    if not message or not chat:
         return
 
-    text = msg.text or msg.caption or ""
-
-    # 🔗 تەنها ئەگەر بۆ ئەم گرووپە سڕینەوەی لینک چالاک کرابێت
-    if link_protection.get(msg.chat_id, False):
-
-        if URL_REGEX.search(text):
-
-            await delete_msg(
-                context.bot,
-                msg.chat_id,
-                msg.message_id
-            )
-
-            return
-
-    # 🤖 block ONLY bot text messages
-    if msg.text and msg.from_user and msg.from_user.is_bot:
-
-        await delete_msg(
-            context.bot,
-            msg.chat_id,
-            msg.message_id
-        )
-
+    # تەنها گرووپە چالاککراوەکان
+    if chat.id not in link_protection:
         return
 
-    # 🎥 video
-    if msg.video:
+    # دەقی پەیام یان caption
+    text = message.text or message.caption or ""
 
-        asyncio.create_task(
-            process_media(
-                context.bot,
-                msg.chat_id,
-                msg.message_id,
-                msg.video.file_id,
-                msg.caption,
-                True
-            )
-        )
+    # پشکنینی:
+    # http://
+    # https://
+    # www.
+    # t.me/
+    # @username
+    pattern = r"(https?://\S+|www\.\S+|t\.me/\S+|@\w+)"
 
-    # 🎞 GIF / animation
-    elif msg.animation:
+    if re.search(pattern, text, re.IGNORECASE):
 
-        asyncio.create_task(
-            process_media(
-                context.bot,
-                msg.chat_id,
-                msg.message_id,
-                msg.animation.file_id,
-                msg.caption,
-                False
-            )
-        )
+        try:
+            await message.delete()
 
-    # 🖼 photo
-    elif msg.photo:
+        except Exception as e:
+            print(f"Could not delete message: {e}")
 
-        asyncio.create_task(
-            delete_photo(
-                context.bot,
-                msg.chat_id,
-                msg.message_id
-            )
-        )
 
+# =========================
+# Main
+# =========================
 
 def main():
 
-    app = ApplicationBuilder().token(TOKEN).build()
+    app = Application.builder().token(TOKEN).build()
 
     # /start
     app.add_handler(
@@ -276,13 +187,22 @@ def main():
         CallbackQueryHandler(button_handler)
     )
 
-    # پەیامەکان
+    # پشکنینی پەیامەکان بۆ لینک و @
     app.add_handler(
-        MessageHandler(filters.ALL, handle)
+        MessageHandler(
+            filters.TEXT | filters.CAPTION,
+            delete_links
+        )
     )
+
+    print("Bot is running...")
 
     app.run_polling()
 
+
+# =========================
+# Run
+# =========================
 
 if __name__ == "__main__":
     main()
