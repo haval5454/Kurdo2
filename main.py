@@ -15,7 +15,7 @@ from telegram.ext import (
     filters,
 )
 
-TOKEN = "BOT_TOKEN"
+TOKEN = "8725595567:AAG1lw-AMx0v9EQS_i9fsFPn5QcFi8zHaSc"
 
 # گرووپەکان کە بۆتەکە تێیانە
 bot_groups = {}
