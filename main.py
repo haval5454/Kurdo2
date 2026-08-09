@@ -1,24 +1,32 @@
 import re
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import (
+    Update,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+)
 from telegram.ext import (
     Application,
     CommandHandler,
     CallbackQueryHandler,
     ContextTypes,
     MessageHandler,
+    ChatMemberHandler,
     filters,
 )
 
-TOKEN = "8725595567:AAG1lw-AMx0v9EQS_i9fsFPn5QcFi8zHaSc"
+TOKEN = "BOT_TOKEN"
 
-# گرووپەکانی کە پاراستنی لینک لێیان چالاکە
+# گرووپەکان کە بۆتەکە تێیانە
+bot_groups = {}
+
+# گرووپەکانی کە سڕینەوەی لینک لێیان چالاکە
 link_protection = set()
 
 
-# =========================
+# =========================================================
 # /start
-# =========================
+# =========================================================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
@@ -46,19 +54,24 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "3️⃣ سڕینەوەی هەموو لینکەکان",
                 callback_data="links"
             )
-        ]
+        ],
     ]
 
+    text = """
+✨ بەخێربێیت ✨
+
+👇 یەکێک لە هەڵبژاردنەکان هەڵبژێرە:
+"""
+
     await update.message.reply_text(
-        "✨ بەخێربێیت ✨\n\n"
-        "👇 هەڵبژاردنێک هەڵبژێرە:",
+        text,
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
 
-# =========================
-# Button Handler
-# =========================
+# =========================================================
+# دوگمەکان
+# =========================================================
 
 async def button_handler(
     update: Update,
@@ -68,9 +81,9 @@ async def button_handler(
     query = update.callback_query
     await query.answer()
 
-    # =========================
+    # -----------------------------------------------------
     # سڕینەوەی لینکەکان
-    # =========================
+    # -----------------------------------------------------
 
     if query.data == "links":
 
@@ -83,7 +96,7 @@ async def button_handler(
                 InlineKeyboardButton(
                     "نەخێر ❌",
                     callback_data="no_links"
-                )
+                ),
             ]
         ]
 
@@ -94,45 +107,117 @@ async def button_handler(
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
-    # =========================
+    # -----------------------------------------------------
     # بەڵێ
-    # =========================
+    # -----------------------------------------------------
 
     elif query.data == "yes_links":
 
-        if query.message.chat.type in ["group", "supergroup"]:
+        # تەنها Private Chat
+        if query.message.chat.type != "private":
+            await query.edit_message_text(
+                "⚠️ تکایە ئەم کارە لە Private Chat ـی بۆتەکە بکە."
+            )
+            return
 
-            chat_id = query.message.chat.id
-
-            link_protection.add(chat_id)
+        # ئەگەر هیچ گرووپێک نەدۆزرایەوە
+        if not bot_groups:
 
             await query.edit_message_text(
-                "✅ سڕینەوەی لینکەکان چالاک کرا.\n\n"
-                "لە ئێستاوە هەر پەیامێک کە "
-                "لینک یان @username ـی تێدا بێت "
-                "لەو گرووپە دەسڕێتەوە."
+                "⚠️ هیچ گرووپێک نەدۆزرایەوە.\n\n"
+                "سەرەتا بۆتەکە زیاد بکە بۆ گرووپەکەت و "
+                "بیکە بە Admin."
+            )
+            return
+
+        # پیشاندانی گرووپەکان
+        keyboard = []
+
+        for chat_id, chat_title in bot_groups.items():
+
+            keyboard.append(
+                [
+                    InlineKeyboardButton(
+                        f"📌 {chat_title}",
+                        callback_data=f"select_group:{chat_id}"
+                    )
+                ]
             )
 
-        else:
+        await query.edit_message_text(
+            "📌 گرووپەکە هەڵبژێرە:",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
 
-            await query.edit_message_text(
-                "⚠️ ئەم هەڵبژاردنە دەبێت لە گرووپەکە چالاک بکرێت."
-            )
-
-    # =========================
+    # -----------------------------------------------------
     # نەخێر
-    # =========================
+    # -----------------------------------------------------
 
     elif query.data == "no_links":
 
         await query.edit_message_text(
-            "❌ سڕینەوەی لینکەکان چالاک نەکرا."
+            "❌ هەڵوەشێنرایەوە."
+        )
+
+    # -----------------------------------------------------
+    # هەڵبژاردنی گرووپ
+    # -----------------------------------------------------
+
+    elif query.data.startswith("select_group:"):
+
+        chat_id = int(
+            query.data.split(":")[1]
+        )
+
+        if chat_id not in bot_groups:
+
+            await query.edit_message_text(
+                "⚠️ ئەم گرووپە نەدۆزرایەوە."
+            )
+            return
+
+        link_protection.add(chat_id)
+
+        group_name = bot_groups[chat_id]
+
+        await query.edit_message_text(
+            f"✅ سڕینەوەی لینکەکان چالاک کرا.\n\n"
+            f"📌 گرووپ: {group_name}\n\n"
+            "لە ئێستاوە هەر پەیامێک کە "
+            "لینک یان @username ـی تێدا بێت "
+            "لەو گرووپە دەسڕێتەوە."
         )
 
 
-# =========================
-# Link / Username Detector
-# =========================
+# =========================================================
+# دۆزینەوەی گرووپ کاتێک بۆتەکە زیاد دەکرێت
+# =========================================================
+
+async def bot_added_to_group(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+
+    chat_member = update.my_chat_member
+
+    if not chat_member:
+        return
+
+    chat = chat_member.chat
+
+    new_status = chat_member.new_chat_member.status
+
+    # بۆتەکە بوو بە member/admin
+    if new_status in ["member", "administrator"]:
+
+        if chat.type in ["group", "supergroup"]:
+
+            bot_groups[chat.id] = chat.title or "بێ ناو"
+
+
+# =========================================================
+# سڕینەوەی لینک و @username
+# =========================================================
 
 async def delete_links(
     update: Update,
@@ -149,15 +234,15 @@ async def delete_links(
     if chat.id not in link_protection:
         return
 
-    # دەقی پەیام یان caption
     text = message.text or message.caption or ""
 
-    # پشکنینی:
+    # دۆزینەوەی:
     # http://
     # https://
     # www.
     # t.me/
     # @username
+
     pattern = r"(https?://\S+|www\.\S+|t\.me/\S+|@\w+)"
 
     if re.search(pattern, text, re.IGNORECASE):
@@ -165,29 +250,49 @@ async def delete_links(
         try:
             await message.delete()
 
-        except Exception as e:
-            print(f"Could not delete message: {e}")
+        except Exception as error:
+
+            print(
+                f"Could not delete message: {error}"
+            )
 
 
-# =========================
+# =========================================================
 # Main
-# =========================
+# =========================================================
 
 def main():
 
-    app = Application.builder().token(TOKEN).build()
+    app = (
+        Application.builder()
+        .token(TOKEN)
+        .build()
+    )
 
     # /start
     app.add_handler(
-        CommandHandler("start", start)
+        CommandHandler(
+            "start",
+            start
+        )
     )
 
     # دوگمەکان
     app.add_handler(
-        CallbackQueryHandler(button_handler)
+        CallbackQueryHandler(
+            button_handler
+        )
     )
 
-    # پشکنینی پەیامەکان بۆ لینک و @
+    # کاتێک بۆتەکە زیاد دەکرێت بۆ گرووپ
+    app.add_handler(
+        ChatMemberHandler(
+            bot_added_to_group,
+            ChatMemberHandler.MY_CHAT_MEMBER
+        )
+    )
+
+    # پشکنینی پەیامەکان
     app.add_handler(
         MessageHandler(
             filters.TEXT | filters.CAPTION,
@@ -195,14 +300,14 @@ def main():
         )
     )
 
-    print("Bot is running...")
+    print("🤖 Bot is running...")
 
     app.run_polling()
 
 
-# =========================
+# =========================================================
 # Run
-# =========================
+# =========================================================
 
 if __name__ == "__main__":
     main()
