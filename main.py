@@ -4,75 +4,91 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Mess
 
 TOKEN = '8725595567:AAG1lw-AMx0v9EQS_i9fsFPn5QcFi8zHaSc'
 
-# خەزنکردنی دۆخی لینک سڕینەوە بۆ هەر گروپێک بە جیا
-delete_links_status = {}
-
+# فەرمانی /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = (
+        "✨ بەخێربێیت بۆ بۆتی هاوکاری گروپ! ✨\n\n"
+        "ئەم بۆتە یارمەتیت دەدات بۆ بەڕێوەبردن و ڕێکخستنی گرووپەکەت بەبێ هیچ کێشەیەک.\n"
+        "تکایە یەکێک لە هەڵبژاردنەکان هەڵبژێرە 👇"
+    )
+
     keyboard = [
-        [InlineKeyboardButton("سڕینەوەی لینکەکان 🖇️", callback_data='menu_links')],
+        [InlineKeyboardButton("سڕینەوەی هەموو لینکەکان 🖇️", callback_data='delete_links_confirm')],
+        [InlineKeyboardButton("کات دانان بۆ ڤیدیۆ 🎬", callback_data='time_video')],
+        [InlineKeyboardButton("کات دانان بۆ وێنە 🖼️", callback_data='time_image')],
         [InlineKeyboardButton("لە گروپەکەم زیادم بکە ➕", url="https://t.me/parezraw_bot?startgroup=true")]
     ]
-    await update.message.reply_text("فەرموو، هەڵبژاردنەکەت بکە:", reply_markup=InlineKeyboardMarkup(keyboard))
+    
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text(text, reply_markup=reply_markup)
 
+# بەڕێوەبردنی کلیکی دوگمەکان
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    chat_id = query.message.chat_id
     await query.answer()
 
-    if query.data == 'menu_links':
-        kb = [[InlineKeyboardButton("بەڵێ، چالاکی بکە ✅", callback_data='enable'), 
-               InlineKeyboardButton("نەخێر ❌", callback_data='disable')]]
-        await query.edit_message_text("ئایا دڵنیایت لینکەکان بسڕمەوە؟", reply_markup=InlineKeyboardMarkup(kb))
-    
-    elif query.data == 'enable':
-        delete_links_status[chat_id] = True
-        await query.edit_message_text("سڕینەوەی لینکەکان بۆ ئەم گروپە **چالاککرا** ✅")
-    elif query.data == 'disable':
-        delete_links_status[chat_id] = False
-        await query.edit_message_text("سڕینەوەی لینکەکان **ناچالاککرا** ❌")
+    if query.data == 'delete_links_confirm':
+        confirm_keyboard = [
+            [
+                InlineKeyboardButton("بەڵێ ✅", callback_data='enable_link_delete'),
+                InlineKeyboardButton("نەخێر ❌", callback_data='disable_link_delete')
+            ]
+        ]
+        reply_markup = InlineKeyboardMarkup(confirm_keyboard)
+        await query.edit_message_text(
+            text="ئایا دڵنیایت لە چالاککردنی سڕینەوەی هەموو لینکەکان لە گروپدا؟",
+            reply_markup=reply_markup
+        )
 
+    elif query.data == 'enable_link_delete':
+        context.chat_data['delete_links'] = True
+        await query.edit_message_text(text="سیستەمی سڕینەوەی لینکەکان بە سەرکەوتوویی **چالاککرا** ✅")
+
+    elif query.data == 'disable_link_delete':
+        context.chat_data['delete_links'] = False
+        await query.edit_message_text(text="کردارەکە هەڵوەشێنرایەوە. سڕینەوەی لینکەکان **ناچالاکە** ❌")
+
+# فلتەرکردن و سڕینەوەی پەیامەکان (تەنها بۆ خاوەنی گروپ ڕێگەپێدراوە)
 async def filter_links(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not update.message: return
-    chat_id = update.effective_chat.id
-    
-    # ئەگەر لەم گروپەدا چالاک نەکرابوو، هیچی مەکە
-    if not delete_links_status.get(chat_id, False):
-        return
+    if context.chat_data.get('delete_links', False):
+        if update.message:
+            chat_id = update.effective_chat.id
+            user_id = update.message.from_user.id
+            
+            try:
+                # وەرگرتنی زانیاری بەکارهێنەر
+                member = await context.bot.get_chat_member(chat_id, user_id)
+                
+                # تەنها ئەگەر خاوەنی گروپ (creator) بێت لینکەکەی ناسڕدرێتەوە
+                if member.status == 'creator':
+                    return
+            except Exception as e:
+                print(f"کێشە لە وەرگرتنی زانیاری ئەندام: {e}")
 
-    # پشکنینی ئەدمین (ئەگەر ئەدمین بوو، با لینک بنێرێت)
-    try:
-        user = update.message.from_user
-        member = await context.bot.get_chat_member(chat_id, user.id)
-        if member.status in ['creator', 'administrator']:
-            return
-    except:
-        pass
+            # وەرگرتنی دەق یان کاپشن
+            text = (update.message.text or "") + " " + (update.message.caption or "")
 
-    # پشکنینی دەق یان کاپشن
-    text = (update.message.text or "") + (update.message.caption or "")
-    
-    # ئەمەش Regex کە هەموو جۆرەکانی دەگرێت
-    # t.me/ یان لینک یان www یان https یان @username
-    pattern = r"(https?://\S+|www\.\S+|t\.me/\S+|@\w+)"
-    
-    if re.search(pattern, text):
-        try:
-            await update.message.delete()
-            print(f"پەیامێکی لینک سڕدرایەوە لە گروپ: {chat_id}")
-        except Exception as e:
-            print(f"هەڵە لە سڕینەوە: {e} (تکایە دڵنیابە بۆتەکە ئەدمینە)")
+            # Regex ی ناسینەوەی هەموو جۆرە لینک و یوزەرنەیمێک
+            link_pattern = r"(https?://\S+|www\.\S+|t\.me/\S+|@\w+)"
+            
+            if re.search(link_pattern, text):
+                try:
+                    await update.message.delete()
+                except Exception as e:
+                    print(f"کێشە لە سڕینەوەی پەیام: {e}")
 
 def main():
     app = Application.builder().token(TOKEN).build()
+
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button_handler))
     
-    # چاودێریکردنی هەموو پەیامەکان (Text + Caption)
-    app.add_handler(MessageHandler(filters.TEXT | filters.CAPTION, filter_links))
-    
-    print("بۆتەکە چالاکە...")
+    # چاودێریکردنی پەیامە دەقییەکان و کاپشنی وێنە/ڤیدیۆکان
+    app.add_handler(MessageHandler((filters.TEXT | filters.CAPTION) & ~filters.COMMAND, filter_links))
+
+    print("بۆتەکە چالاک کرا...")
     app.run_polling()
 
 if __name__ == '__main__':
     main()
-    
+                
